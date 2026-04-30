@@ -17,16 +17,28 @@ export default function SpendingPieChart({
 }) {
   const chartData = data.length ? data : [{ name: 'No Data', value: 1 }];
 
+  const shortenLabel = (label: string) => (label.length > 12 ? `${label.slice(0, 12)}…` : label);
+
   return (
     <div className="card h-80 p-4">
       <h3 className="text-lg font-bold">توزيع الإنفاق حسب الفئة</h3>
       <div className="h-64">
         {mode === 'bar' ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
+            <BarChart data={chartData} margin={{ top: 8, right: 12, left: 20, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
+              <XAxis
+                dataKey="name"
+                interval={0}
+                angle={-30}
+                textAnchor="end"
+                height={68}
+                tickMargin={10}
+                minTickGap={14}
+                tick={{ fontSize: 12 }}
+                tickFormatter={shortenLabel}
+              />
+              <YAxis width={56} />
               <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
               <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                 {chartData.map((_, index) => (
@@ -46,13 +58,13 @@ export default function SpendingPieChart({
                     nameKey="name"
                     cx="50%"
                     cy="50%"
-                    innerRadius={mode === 'donut' ? 55 : 0}
-                    outerRadius="82%"
+                    innerRadius={mode === 'donut' ? '45%' : 0}
+                    outerRadius={mode === 'donut' ? '72%' : '82%'}
                     label={false}
                     labelLine={false}
                   >
                     {chartData.map((_, index) => (
-                      <Cell key={index} fill={COLORS[index % COLORS.length]} stroke="#ffffff" strokeWidth={2} />
+                      <Cell key={index} fill={COLORS[index % COLORS.length]} stroke="#ffffff" strokeWidth={mode === 'donut' ? 1 : 2} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
