@@ -2,15 +2,18 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import { formatCurrency } from '@/lib/utils';
 
-const COLORS = ['#0ea5e9', '#1e40af', '#38bdf8', '#0284c7', '#7dd3fc', '#3b82f6', '#60a5fa'];
+const COLORS = ['#1d4ed8', '#ea580c', '#dc2626', '#16a34a', '#7c3aed', '#0f766e', '#d97706'];
 
 export default function SpendingPieChart({
   data,
   mode = 'pie',
+  currency = 'JOD',
 }: {
   data: { name: string; value: number }[];
   mode?: 'pie' | 'donut' | 'bar';
+  currency?: string;
 }) {
   const chartData = data.length ? data : [{ name: 'No Data', value: 1 }];
 
@@ -18,39 +21,61 @@ export default function SpendingPieChart({
     <div className="card h-80 p-4">
       <h3 className="text-lg font-bold">توزيع الإنفاق حسب الفئة</h3>
       <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          {mode === 'bar' ? (
+        {mode === 'bar' ? (
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip formatter={(value: number) => `${value.toLocaleString('ar-EG')} ج.م`} />
+              <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
               <Bar dataKey="value" radius={[8, 8, 0, 0]}>
                 {chartData.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={index} fill={COLORS[index % COLORS.length]} stroke="#ffffff" strokeWidth={2} />
                 ))}
               </Bar>
             </BarChart>
-          ) : (
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                innerRadius={mode === 'donut' ? 55 : 0}
-                outerRadius={90}
-                label
-              >
-                {chartData.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value: number) => `${value.toLocaleString('ar-EG')} ج.م`} />
-            </PieChart>
-          )}
-        </ResponsiveContainer>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full flex-col gap-4 pt-2 md:flex-row md:items-center md:pt-0">
+            <div className="h-48 w-full md:h-full md:w-2/3">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={mode === 'donut' ? 55 : 0}
+                    outerRadius="82%"
+                    label={false}
+                    labelLine={false}
+                  >
+                    {chartData.map((_, index) => (
+                      <Cell key={index} fill={COLORS[index % COLORS.length]} stroke="#ffffff" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatCurrency(value, currency)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            <ul className="w-full space-y-2 overflow-auto text-sm md:w-1/3">
+              {chartData.map((item, index) => (
+                <li key={`${item.name}-${index}`} className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    />
+                    <span className="break-words">{item.name}</span>
+                  </div>
+                  <span className="shrink-0 font-medium">{formatCurrency(item.value, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );

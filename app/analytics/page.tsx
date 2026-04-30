@@ -27,7 +27,7 @@ export default function AnalyticsPage() {
       <section className="space-y-4">
         <div className="card p-5">
           <h2 className="text-2xl font-bold">التحليلات</h2>
-          <p className="mt-1 text-slate-500">عرض مرئي لأنماط الصرف على طريقة التصميم القديم.</p>
+          <p className="mt-1 text-slate-500">عرض مرئي لأنماط الصرف لمساعدتك على فهم عادات الإنفاق.</p>
         </div>
 
         <div className="card p-4">
@@ -38,6 +38,7 @@ export default function AnalyticsPage() {
           </div>
           <SpendingPieChart
             mode={chartMode}
+            currency={activeFamily.currency}
             data={insights.categorySpend.map((item) => ({ name: item.name, value: item.spent }))}
           />
         </div>
@@ -46,8 +47,8 @@ export default function AnalyticsPage() {
           {insights.categorySpend.map((item) => (
             <div key={item.id} className="card p-4">
               <p className="font-semibold">{item.name}</p>
-              <p className="mt-1 text-sm text-slate-500">المصروف: {formatCurrency(item.spent)}</p>
-              <p className="text-sm text-slate-500">الحد: {formatCurrency(item.limit)}</p>
+              <p className="mt-1 text-sm text-slate-500">المصروف: {formatCurrency(item.spent, activeFamily.currency)}</p>
+              <p className="text-sm text-slate-500">الحد: {formatCurrency(item.limit, activeFamily.currency)}</p>
             </div>
           ))}
         </div>

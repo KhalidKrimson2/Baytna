@@ -27,12 +27,19 @@ export interface Expense {
 export interface Family {
   id: string;
   familyName: string;
+  currency: string;
   monthlyBudget: number;
   inviteCode: string;
   createdAt: string;
   members: Member[];
   categories: Category[];
   expenses: Expense[];
+}
+
+
+export interface InsightAlert {
+  priority: number;
+  message: string;
 }
 
 export interface FamilyDB {

@@ -1,7 +1,7 @@
-import { Expense, Family, Member } from '@/types/family';
+import { Expense, Family, InsightAlert, Member } from '@/types/family';
 
-export const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('ar-EG', { style: 'currency', currency: 'EGP', maximumFractionDigits: 0 }).format(value);
+export const formatCurrency = (value: number, currency = 'JOD') =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
 
 export const daysPassedInMonth = (date = new Date()) => date.getDate();
 
@@ -22,32 +22,100 @@ export const getTopSpender = (members: Member[], expenses: Expense[]) => {
   return sorted[0] || null;
 };
 
+const sortAndTrimAlerts = (alerts: InsightAlert[], maxAlerts = 5) =>
+  alerts
+    .sort((a, b) => a.priority - b.priority || a.message.localeCompare(b.message))
+    .slice(0, maxAlerts);
+
 export const buildInsights = (family: Family) => {
   const totalSpent = getTotalSpent(family.expenses);
   const remaining = family.monthlyBudget - totalSpent;
-  const dailyBurnRate = totalSpent / Math.max(daysPassedInMonth(), 1);
+  const passedDays = Math.max(daysPassedInMonth(), 1);
+  const totalDays = Math.max(daysInCurrentMonth(), 1);
+  const daysLeftInMonth = Math.max(totalDays - passedDays, 0);
+  const dailyBurnRate = totalSpent / passedDays;
   const predictedDaysLeft = dailyBurnRate > 0 ? remaining / dailyBurnRate : Infinity;
-  const daysLeftInMonth = daysInCurrentMonth() - daysPassedInMonth();
+  const plannedSpendByToday = (family.monthlyBudget / totalDays) * passedDays;
+  const disciplineRatio = plannedSpendByToday > 0 ? totalSpent / plannedSpendByToday : 0;
+  const disciplineScore = Math.max(0, 100 - Math.max(disciplineRatio - 1, 0) * 100);
+  const projectedDepletionDate =
+    dailyBurnRate > 0 && remaining > 0
+      ? new Date(new Date().getFullYear(), new Date().getMonth(), Math.ceil(daysPassedInMonth() + predictedDaysLeft))
+      : null;
 
   const categorySpend = family.categories.map((cat) => {
     const spent = family.expenses.filter((e) => e.categoryId === cat.id).reduce((s, e) => s + e.amount, 0);
     return { ...cat, spent };
   });
 
-  const alerts: string[] = [];
+  const alerts: InsightAlert[] = [];
+  const budget = Math.max(family.monthlyBudget, 0);
+
+  if (budget > 0 && totalSpent > budget) {
+    alerts.push({
+      priority: 1,
+      message: `تجاوزت الميزانية الشهرية بمقدار ${formatCurrency(totalSpent - budget, family.currency)}.`,
+    });
+  }
+
+  if (budget > 0) {
+    const monthProgress = passedDays / totalDays;
+    const spendRatio = totalSpent / budget;
+    if (monthProgress >= 0.5 && spendRatio >= 0.55) {
+      alerts.push({
+        priority: 2,
+        message: `منتصف الشهر وصل والإنفاق بلغ ${(spendRatio * 100).toFixed(0)}% من الميزانية.`,
+      });
+    }
+  }
+
+  const topCategoryByBudget =
+    budget > 0
+      ? categorySpend
+          .map((cat) => ({ ...cat, share: cat.spent / budget }))
+          .sort((a, b) => b.share - a.share)[0]
+      : null;
+
+  if (topCategoryByBudget && topCategoryByBudget.share >= 0.4) {
+    alerts.push({
+      priority: 3,
+      message: `فئة "${topCategoryByBudget.name}" تستهلك ${(topCategoryByBudget.share * 100).toFixed(0)}% من الميزانية.`,
+    });
+  }
 
   categorySpend.forEach((cat) => {
-    const usage = cat.limit > 0 ? (cat.spent / cat.limit) * 100 : 0;
-    if (usage >= 90 && usage < 100) {
-      alerts.push(`تنبيه: فئة "${cat.name}" وصلت إلى ${usage.toFixed(0)}% من الحد.`);
-    }
-    if (usage >= 100) {
-      alerts.push(`تجاوز: فئة "${cat.name}" تخطت الحد المحدد.`);
+    if (cat.limit > 0 && cat.spent > cat.limit) {
+      alerts.push({
+        priority: 4,
+        message: `فئة "${cat.name}" تجاوزت الحد بمقدار ${formatCurrency(cat.spent - cat.limit, family.currency)}.`,
+      });
     }
   });
 
-  if (dailyBurnRate > 0 && predictedDaysLeft < daysLeftInMonth) {
-    alerts.push(`معدل الصرف الحالي مرتفع، الميزانية قد تنفد خلال ${Math.max(Math.floor(predictedDaysLeft), 0)} أيام.`);
+  const last28Days = 28;
+  const now = new Date();
+  const startWindow = new Date(now);
+  startWindow.setDate(now.getDate() - last28Days + 1);
+  const weeklyWindowTotal = family.expenses
+    .filter((expense) => {
+      const expenseDate = new Date(expense.createdAt);
+      return expenseDate >= startWindow && expenseDate <= now;
+    })
+    .reduce((sum, expense) => sum + expense.amount, 0);
+  const avgSpendPerWeek = weeklyWindowTotal / 4;
+
+  alerts.push({
+    priority: 5,
+    message: `متوسط الصرف الأسبوعي: ${formatCurrency(avgSpendPerWeek, family.currency)}.`,
+  });
+
+  const todayKey = now.toISOString().slice(0, 10);
+  const hasExpenseToday = family.expenses.some((expense) => expense.createdAt.slice(0, 10) === todayKey);
+  if (!hasExpenseToday) {
+    alerts.push({
+      priority: 6,
+      message: 'لا توجد مصروفات مسجلة اليوم حتى الآن.',
+    });
   }
 
   return {
@@ -56,8 +124,13 @@ export const buildInsights = (family: Family) => {
     dailyBurnRate,
     predictedDaysLeft,
     daysLeftInMonth,
+    plannedSpendByToday,
+    disciplineRatio,
+    disciplineScore,
+    projectedDepletionDate,
     categorySpend,
-    alerts,
+    avgSpendPerWeek,
+    alerts: sortAndTrimAlerts(alerts),
   };
 };
 

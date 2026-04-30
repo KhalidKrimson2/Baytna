@@ -24,29 +24,52 @@ const CATEGORY_TEMPLATES = [
 ];
 
 export default function AdminOnboardingPage() {
+  const parsePositiveAmount = (value: string) => {
+    const parsed = Number(value.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.round(parsed * 100) / 100;
+  };
+
   const router = useRouter();
   const { ready, createFamily } = useFamilyData();
   const [step, setStep] = useState(1);
   const [adminName, setAdminName] = useState('');
   const [familyName, setFamilyName] = useState('');
-  const [monthlyBudget, setMonthlyBudget] = useState(12000);
+  const [currency, setCurrency] = useState('JOD');
+  const [monthlyBudgetInput, setMonthlyBudgetInput] = useState('12000');
   const [customCategory, setCustomCategory] = useState('');
   const [customEmoji, setCustomEmoji] = useState('');
   const [categories, setCategories] = useState(CATEGORY_TEMPLATES);
+  const [categoryLimitInputs, setCategoryLimitInputs] = useState<Record<string, string>>(
+    Object.fromEntries(CATEGORY_TEMPLATES.map((category) => [category.name, String(category.limit)])),
+  );
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     CATEGORY_TEMPLATES.slice(0, 3).map((c) => c.name),
   );
   const [inviteCode, setInviteCode] = useState('');
 
-  const canStep1 = adminName.trim() && familyName.trim() && monthlyBudget > 0;
+  const monthlyBudget = parsePositiveAmount(monthlyBudgetInput);
+  const canStep1 = adminName.trim() && familyName.trim() && monthlyBudget !== null;
   const chosenCategories = useMemo(
     () => categories.filter((c) => selectedCategories.includes(c.name)),
     [categories, selectedCategories],
   );
-  const canCreate = useMemo(
-    () => chosenCategories.length > 0 && chosenCategories.every((c) => c.name.trim() && c.limit > 0),
-    [chosenCategories],
+  const canCreate = useMemo(() => {
+    if (chosenCategories.length === 0) return false;
+    return chosenCategories.every((category) => {
+      const parsedLimit = parsePositiveAmount(categoryLimitInputs[category.name] ?? String(category.limit));
+      return Boolean(category.name.trim()) && parsedLimit !== null;
+    });
+  }, [categoryLimitInputs, chosenCategories]);
+  const totalSelectedLimits = useMemo(
+    () =>
+      chosenCategories.reduce((sum, category) => {
+        const parsedLimit = parsePositiveAmount(categoryLimitInputs[category.name] ?? String(category.limit));
+        return sum + (parsedLimit ?? 0);
+      }, 0),
+    [categoryLimitInputs, chosenCategories],
   );
+  const isCategoryLimitOverBudget = monthlyBudget !== null && totalSelectedLimits > monthlyBudget;
 
   if (!ready) return null;
 
@@ -65,6 +88,7 @@ export default function AdminOnboardingPage() {
       limit: 500,
     };
     setCategories((prev) => [...prev, nextCategory]);
+    setCategoryLimitInputs((prev) => ({ ...prev, [nextName]: String(nextCategory.limit) }));
     setSelectedCategories((prev) => [...prev, nextName]);
     setCustomCategory('');
     setCustomEmoji('');
@@ -77,11 +101,20 @@ export default function AdminOnboardingPage() {
   };
 
   const handleCreate = () => {
+    if (monthlyBudget === null) return;
+
     const family = createFamily({
       adminName,
       familyName,
+      currency,
       monthlyBudget,
-      categories: chosenCategories,
+      categories: chosenCategories.map((category) => {
+        const parsedLimit = parsePositiveAmount(categoryLimitInputs[category.name] ?? String(category.limit));
+        return {
+          ...category,
+          limit: parsedLimit ?? category.limit,
+        };
+      }),
     });
     setInviteCode(family.inviteCode);
     setStep(3);
@@ -97,12 +130,24 @@ export default function AdminOnboardingPage() {
           <div className="mt-6 space-y-4">
             <input className="input" placeholder="اسم المدير" value={adminName} onChange={(e) => setAdminName(e.target.value)} />
             <input className="input" placeholder="اسم العائلة/المجموعة" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+            <select className="input" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <option value="JOD">JOD - Jordanian Dinar</option>
+              <option value="USD">USD - US Dollar</option>
+              <option value="SAR">SAR - Saudi Riyal</option>
+              <option value="AED">AED - UAE Dirham</option>
+              <option value="EGP">EGP - Egyptian Pound</option>
+            </select>
             <input
               className="input"
-              type="number"
+              type="text"
+              inputMode="decimal"
               placeholder="إجمالي ميزانية الشهر"
-              value={monthlyBudget}
-              onChange={(e) => setMonthlyBudget(Number(e.target.value))}
+              value={monthlyBudgetInput}
+              onChange={(e) => setMonthlyBudgetInput(e.target.value)}
+              onBlur={() => {
+                const parsed = parsePositiveAmount(monthlyBudgetInput);
+                if (parsed !== null) setMonthlyBudgetInput(parsed.toFixed(2));
+              }}
             />
             <button className="btn-primary" disabled={!canStep1} onClick={() => setStep(2)}>
               التالي
@@ -139,6 +184,14 @@ export default function AdminOnboardingPage() {
 
             <div className="space-y-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
               <p className="text-sm font-semibold text-slate-700">حدود الميزانية للفئات المختارة</p>
+              <p className="text-xs text-slate-600">
+                مجموع الحدود: {totalSelectedLimits.toFixed(2)} / الميزانية: {monthlyBudget !== null ? monthlyBudget.toFixed(2) : '--'}
+              </p>
+              {isCategoryLimitOverBudget && (
+                <p className="text-xs font-semibold text-red-600">
+                  مجموع حدود الفئات يجب أن يكون أقل من أو يساوي ميزانية الشهر.
+                </p>
+              )}
               {chosenCategories.map((cat) => {
                 const index = categories.findIndex((item) => item.name === cat.name);
                 return (
@@ -148,9 +201,22 @@ export default function AdminOnboardingPage() {
                     </p>
                     <input
                       className="w-28 rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm outline-none ring-sky-300 transition focus:ring-2"
-                      type="number"
-                      value={cat.limit}
-                      onChange={(e) => updateLimit(index, Number(e.target.value))}
+                      type="text"
+                      inputMode="decimal"
+                      value={categoryLimitInputs[cat.name] ?? String(cat.limit)}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        setCategoryLimitInputs((prev) => ({ ...prev, [cat.name]: nextValue }));
+                        const parsed = parsePositiveAmount(nextValue);
+                        if (parsed !== null) updateLimit(index, parsed);
+                      }}
+                      onBlur={() => {
+                        const parsed = parsePositiveAmount(categoryLimitInputs[cat.name] ?? String(cat.limit));
+                        if (parsed !== null) {
+                          updateLimit(index, parsed);
+                          setCategoryLimitInputs((prev) => ({ ...prev, [cat.name]: parsed.toFixed(2) }));
+                        }
+                      }}
                     />
                   </div>
                 );
