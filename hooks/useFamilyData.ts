@@ -6,6 +6,57 @@ import { generateId, generateInviteCode } from '@/lib/utils';
 import { Category, Expense, Family, FamilyDB, Member } from '@/types/family';
 
 const initialDB: FamilyDB = { families: {}, session: {} };
+const MOCK_MEMBER_NAMES = ['أحمد', 'سارة', 'محمد', 'ليان'];
+const MOCK_EXPENSE_TITLES = ['خضار وفواكه', 'فاتورة كهرباء', 'وقود السيارة', 'طلبات مطعم', 'دواء', 'مستلزمات المدرسة'];
+const MOCK_NOTES = ['تم الشراء من السوق المركزي', 'خصم 10%', 'فاتورة شهرية', 'طلب مستعجل', 'للاستخدام المنزلي'];
+
+const createMockMembers = (admin: Member): Member[] => {
+  const createdAt = new Date().toISOString();
+  const otherMembers: Member[] = MOCK_MEMBER_NAMES
+    .filter((name) => name !== admin.name)
+    .slice(0, 3)
+    .map((name) => ({
+      id: generateId('member'),
+      name,
+      role: 'member',
+      joinedAt: createdAt,
+    }));
+  return [admin, ...otherMembers];
+};
+
+const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+const createMockExpenses = (members: Member[], categories: Category[]): Expense[] => {
+  const mockExpenses: Expense[] = [];
+  const memberIds = members.map((member) => member.id);
+
+  for (let dayOffset = 0; dayOffset < 25; dayOffset += 1) {
+    const baseDate = new Date();
+    baseDate.setDate(baseDate.getDate() - dayOffset);
+    const dailyExpenseCount = randomInt(1, 3);
+
+    for (let idx = 0; idx < dailyExpenseCount; idx += 1) {
+      const expenseDate = new Date(baseDate);
+      expenseDate.setHours(randomInt(8, 22), randomInt(0, 59), randomInt(0, 59), 0);
+
+      const category = categories[randomInt(0, categories.length - 1)];
+      const title = MOCK_EXPENSE_TITLES[randomInt(0, MOCK_EXPENSE_TITLES.length - 1)];
+      const amount = randomInt(4, 95);
+
+      mockExpenses.push({
+        id: generateId('exp'),
+        title,
+        amount,
+        categoryId: category.id,
+        memberId: memberIds[randomInt(0, memberIds.length - 1)],
+        note: MOCK_NOTES[randomInt(0, MOCK_NOTES.length - 1)],
+        createdAt: expenseDate.toISOString(),
+      });
+    }
+  }
+
+  return mockExpenses.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+};
 
 export function useFamilyData() {
   const [db, setDb] = useState<FamilyDB>(initialDB);
@@ -52,8 +103,10 @@ export function useFamilyData() {
     const adminId = generateId('member');
     const now = new Date().toISOString();
 
-    const members: Member[] = [{ id: adminId, name: payload.adminName, role: 'admin', joinedAt: now }];
+    const adminMember: Member = { id: adminId, name: payload.adminName, role: 'admin', joinedAt: now };
+    const members: Member[] = createMockMembers(adminMember);
     const categories: Category[] = payload.categories.map((c) => ({ id: generateId('cat'), name: c.name, limit: c.limit }));
+    const expenses: Expense[] = createMockExpenses(members, categories);
 
     const family: Family = {
       id: familyId,
@@ -64,7 +117,7 @@ export function useFamilyData() {
       createdAt: now,
       members,
       categories,
-      expenses: [],
+      expenses,
     };
 
     const next: FamilyDB = {
